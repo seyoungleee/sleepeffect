@@ -1,0 +1,631 @@
+---
+title: 'Sleep Effect on GPA in University Students'
+author: "Seyoung Lee"
+date: "October 13, 2023"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# Install and load packages
+library(readr)
+library(ggplot2)
+library(psych)
+library(modelsummary)
+library(moments)
+library(knitr)
+library(tidyverse)
+library(gridExtra)
+library(grid)
+```
+
+```{r, include=FALSE}
+# Load data
+sleep <- read_csv("~/Desktop/modern regression/cmu-sleep.csv")
+```
+
+
+# 1. Introduction
+
+Adequate sleep is crucial for a student's overall academic performance in college, and with
+a lack of sleep potentially impacting a student's GPA, it is essential to understand to what degree of
+impact sleep has on a student's GPA. To measure if lack of sleep influences a student's grades,
+a total of 634 students from Carnegie Mellon and two other universities were recruited to track the
+average hours of sleep each participant slept each night for a month during their spring semester.
+At the end of the semester, researchers obtained each participant's semester grades to explore
+the relationship between sleep and grades in university students.
+
+More specifically, the following three research questions were explored:
+
+> 1. What is the association between sleep time and GPA? Is there evidence that students who
+sleep less indeed get lower GPAs?
+
+> 2. The Vice Provost of Carnegie Mellon expects that students would sleep 2 hours less, on average,
+if they have to get up for an 8am class. What average GPA effect do we expect to see with 2 hours less sleep?
+
+> 3. Based on the data, can we conclude that the GPA change is caused by less sleep, or could
+their be other reasons for the relationship?
+
+Because participants' schedules remained private, it is difficult to assume that the implementation of
+early classes directly impacts grades. But based on past research on sleep time with students,
+if students with 8 am classes were to sleep 2 hours less, on average, we theorize that early-morning
+classes set with less sleep time does indeed have an impact on student grades.
+
+In our analysis, we find that there is indeed a slight association between GPA and sleep time. However,
+we also find that GPA from previous semesters is the better variable for predicting current GPA.
+Additionally, two hours less sleep is associated with a slight decrease in GPA in students, but
+it cannot be concluded that GPA change is caused by less sleep due to a multiple of other confounding
+variables unaccounted for.
+
+
+# 2. Exploratory Data Analysis & Data Summary
+
+## 2a. Overall Data Information
+There were three main variables collected for each n=634 participant pool:
+
+> TotalSleepTime: The average time the student spent asleep each night, not counting naps, in minutes.
+
+> term_gpa: The student’s GPA (out of 4.0) for the classes they took in the semester being studied.
+
+> cum_gpa: The student’s GPA (out of 4.0) for the semesters before the one being studied (or first-year students' fall semester grades).
+
+(citation: Reinhart, Alex, "Data Exam 1", 2023.)
+
+
+## 2b. Exploring Total Hours of Sleep (TotalSleepTime.Hours)
+
+```{r, include=FALSE}
+# Add column for sleep time in hours
+sleep$TotalSleepTime.Hours = sleep$TotalSleepTime/60
+
+# Summary
+sleeptime.sum = summary(sleep$TotalSleepTime.Hours)
+```
+
+For purposes of readability, we converted the original variable for average sleep time in minutes
+to total sleep time in hours, or TotalSleepTime.Hours.
+Below is the distribution of the average sleep time in hours each night.
+
+```{r, fig.width=4, fig.height=2.5, fig.align='center', echo=FALSE, warning=FALSE}
+# Histogram
+sleeptime.hist = ggplot(sleep, aes(x=TotalSleepTime.Hours)) +
+  geom_histogram(color="black", fill="#7caed6", bins=35, linewidth=0.2) +
+  labs(x="Sleep Time in Hours", y="Frequency",
+       title="Average Sleep Time in Hours in University Students",
+       caption="Figure 1.") +
+  scale_x_continuous(breaks = seq(0, max(sleep$TotalSleepTime.Hours), by=0.5)) +
+  theme(axis.title.x = element_text(size = 10),
+        axis.title.y = element_text(size = 10),
+        plot.title = element_text(size = 10, hjust = 0.5))
+
+# Add mean line
+sleeptime.hist + geom_vline(aes( xintercept=median(TotalSleepTime.Hours)),
+                            color="#f77f6d", linetype="dashed", size=0.5)
+```
+
+The distribution shown in Figure 1 displays the average sleep time in hours; we see that the distribution
+is unimodal and normally distributed. Based on this variable, students received an average of 6.62 hours and a median of 6.67 hours of sleep. The middle 50 percent of students received 6.12 to 7.17 hours of sleep. As the median line shows, we also see that the distribution is relatively symmetrical.
+
+
+## 2c. Exploring Student GPAs (term_gpa, cum_gpa)
+
+```{r, include=FALSE}
+# Summary
+curr.gpa = summary(sleep$term_gpa)
+before.gpa = summary(sleep$cum_gpa)
+```
+
+There were two main variables to track grades in the participants: the students' current
+semester GPA (term_gpa) and the students' GPA in the previous semester (cum_gpa).
+
+With these two variables, we would be able to measure if there are significant differences
+in previous and current GPAs in the same student, which may be a result of confounding variables
+such as schedule changes or motivation.
+
+Figure 2 shows the distribution of GPAs for both the current semester and
+previous semester.
+
+
+```{r, fig.width=5, fig.height=3, echo=FALSE, fig.align='center'}
+# Density plot before transformations
+ggplot(sleep, aes(x=term_gpa, color="Current GPA")) +
+      geom_density(linetype="solid") +
+      geom_density(aes(x=cum_gpa, color="Previous Semester GPA"), linetype="solid") +
+      labs(color="GPA", title="Before-transformation GPA Distribution",
+           caption="Figure 2.") +
+      xlab("Student GPA (out of 4.0)") +
+      ylab("Density") +
+      scale_color_manual(values = c("Current GPA"="#8cd4c8",
+                                    "Previous Semester GPA"="#f77f6d")) +
+      scale_x_continuous(breaks = seq(0, max(sleep$TotalSleepTime.Hours), by=0.5)) +
+      theme(legend.text=element_text(size=7),
+            legend.title=element_text(size=8),
+            text=element_text(family="Times"),
+            plot.title=element_text(hjust = 0.5))
+```
+
+
+As Figure 2. shows, student GPA is hightly left skewed, such that it does not appear to have a normal distribution.
+In fact, it is strongly negatively skewed with high mean and median values. To further test for normality, we
+calculate the skewness of each GPA dataset: The current semester GPA (term_gpa) yields a -1.73 skewness, and the
+previous semester GPA (cum_gpa) yields a -1.35 skewness. This indicates a heavily negatively (left) skewed dataset,
+as a skewness closer to zero conveys symmetry.
+
+In order to create normality in our data, we apply an inverse transformation for negatively skewed data.
+If we apply the same skewness calculation on each GPA dataset (Figure 3.), we see that the skewness has
+significantly increased, such that it is closer to zero. The transformed current semester GPA (term_gpa)
+now yields a -0.08 skewness, and the transformed previous semester GPA (cum_gpa) now yields a -0.002 skewness.
+
+(citation: https://www.datanovia.com/en/lessons/transform-data-to-normal-distribution-in-r/)
+
+
+```{r, include=FALSE}
+# Before-transformation skewness
+skew.term_gpa = skewness(sleep$term_gpa)
+skew.cum_gpa = skewness(sleep$cum_gpa)
+
+# Apply transformations
+sleep$trans.term_gpa = 1/(max(sleep$term_gpa+1)-sleep$term_gpa)
+sleep$trans.cum_gpa = 1/(max(sleep$cum_gpa+1)-sleep$cum_gpa)
+
+# After-transformation skewness
+skew.trans.term_gpa = skewness(sleep$trans.term_gpa)
+skew.trans.cum_gpa = skewness(sleep$trans.cum_gpa)
+```
+
+
+```{r, fig.width=5, fig.height=3, echo=FALSE, fig.align='center'}
+# Density plots after transformations
+ggplot(sleep, aes(x=1/(max(term_gpa+1)-term_gpa), color="Current GPA")) +
+      geom_density(linetype="solid") +
+      geom_density(aes(x=1/(max(cum_gpa+1)-cum_gpa), color="Previous Semester GPA"), linetype="solid") +
+      labs(color="GPA", title="After-transformation GPA Distribution",
+           caption="Figure 3.") +
+      xlab("Student GPA") +
+      ylab("Density") +
+      scale_color_manual(values = c("Current GPA"="#8cd4c8",
+                                    "Previous Semester GPA"="#f77f6d")) +
+    scale_x_continuous(breaks = seq(0, max(sleep$trans.term_gpa), by=0.1)) +
+      theme(legend.text=element_text(size=7),
+            legend.title=element_text(size=8),
+            text=element_text(family="Times"),
+            plot.title=element_text(hjust=0.5))
+```
+
+```{r, include=FALSE}
+# Summary statistics
+summary(sleep$trans.term_gpa)
+summary(sleep$trans.cum_gpa)
+```
+After the transformation, although still slightly skewed left, the dataset seems much more normal,
+with a mean and median of about 0.70 in both the current semester GPA (term_data)
+previous semester GPA (cum_data).
+
+We can further test for normality through Normal QQ plots. The first row shows the original GPA data, while the
+second row shows the transformed GPA data. The transformation has positively impacted the normality of the data.
+
+```{r, echo=FALSE, fig.align='center', fig.width=5, fig.height=3}
+# Normal QQ-plots, Before transformation
+par(mfrow=c(1,2))
+# term_gpa
+qq.term_gpa = qqnorm(sleep$term_gpa, pch=1, frame=FALSE, main="term_gpa")
+qq.term_gpa = qqline(sleep$term_gpa, col="#8cd4c8", lwd=2)
+# cum_gpa
+qq.cum_gpa = qqnorm(sleep$cum_gpa, pch=1, frame=FALSE, main="cum_gpa")
+qq.cum_gpa = qqline(sleep$cum_gpa, col="#8cd4c8", lwd=2)
+```
+
+
+```{r, echo=FALSE, fig.align='center', fig.width=5, fig.height=3}
+# Normal QQ-plots, After transformation
+par(mfrow=c(1,2))
+# term_gpa
+qq.term_gpa = qqnorm(sleep$trans.term_gpa, pch=1, frame=FALSE, main="trans.term_gpa")
+qq.term_gpa = qqline(sleep$trans.term_gpa, col="#8cd4c8", lwd=2)
+# cum_gpa
+qq.cum_gpa = qqnorm(sleep$trans.cum_gpa, pch=1, frame=FALSE, main="trans.cum_gpa")
+qq.cum_gpa = qqline(sleep$trans.cum_gpa, col="#8cd4c8", lwd=2)
+```
+
+With our transformed data, we now perform an initial bivariate EDA to
+visually test if a relationship between GPA and hours slept in students.
+We plot the effect of hours of sleep in a simple linear regression model, and
+we see in the figure below that GPA by Total Hours Slept suggests some linearity. This further demonstrates
+that the transformation was successful, such that there may be some association between hours slept and GPA.
+
+
+```{r, fig.width=5.5, fig.height=3.2, fig.align='center', echo=FALSE}
+# Bivariate EDA (current, before)
+ggplot(sleep, aes(x=TotalSleepTime.Hours, y=1/(max(term_gpa+1)-term_gpa) )) +
+      geom_point(aes(color="Term GPA"), alpha = 0.5) +
+      geom_point(aes(x=TotalSleepTime.Hours, y=1/(max(cum_gpa+1)-cum_gpa),
+                     color="Current GPA"), alpha=0.5) +
+      labs(color="GPA", caption="Figure 4.", title="GPA by Total Hours Slept") +
+    scale_x_continuous(breaks = seq(0, max(sleep$TotalSleepTime.Hours), by=0.5)) +
+      xlab("Hours of Sleep") +
+      ylab("GPA") +
+      theme(text=element_text(family="Times"),
+            plot.title=element_text(hjust=0.5))
+```
+
+## 2d. Limitations
+
+We also recognize that the data is limited in several ways. First, applying transformations,
+especially with heavily skewed dataset, will affect its interpretations later on
+since significance in data is now based on the inverse transformation, rather than the original
+data itself. Additionally, the population of the dataset favors university students from three universities,
+which may have similar to varying degrees of academic culture unique to each university.
+Hence, although non-normality may be bypassed by the Central Limit Theorem (n>30), it is still important to note that
+the distribution of the GPAs may be favorable to the recruited populations.
+
+
+
+# 3. Methods
+
+## 3a. Research Question 1 Methods
+
+> *What is the association between sleep time and GPA? Is there evidence that students who sleep less indeed get lower GPAs?*
+
+To test whether or not there is an association between sleep time and GPA, we take
+note of the linearity between hours of sleep (TotalSleepTime.Hours) and GPA (term_gpa and cum_gpa)
+suggested in Figure 4.
+
+```{r, include=FALSE}
+# Create linear model for both variables separately
+# Use transformations in linear model
+sleep.lm.term_gpa = lm(trans.term_gpa~TotalSleepTime.Hours, data=sleep)
+summary(sleep.lm.term_gpa)
+
+sleep.lm.cum_gpa = lm(trans.cum_gpa~TotalSleepTime.Hours, data=sleep)
+summary(sleep.lm.cum_gpa)
+
+sleep.lm.gpas = lm(trans.term_gpa~TotalSleepTime.Hours+trans.cum_gpa, data=sleep)
+summary(sleep.lm.gpas)
+```
+
+
+**Which variables are most correlated with one another?**
+
+Below are the correlations between each of the three variables (term_gpa, cum_gpa, and TotalSleepTime.Hours).
+The largest correlation between variables was previous GPA and current GPA, while the correlation between
+GPA and sleep hours is relatively small.
+
+```{r, echo=FALSE}
+# Correlation
+cor_term_gpa = cor(sleep$TotalSleepTime.Hours, sleep$trans.term_gpa)
+cor_cum_gpa = cor(sleep$TotalSleepTime.Hours, sleep$trans.cum_gpa)
+cor_gpas = cor(sleep$trans.term_gpa, sleep$trans.cum_gpa)
+
+cor_data = data.frame(
+  Variable = c("Sleep Hours vs. Current GPA", "Sleep Hours vs. Previous GPA", "Previous GPA vs. Current GPA"),
+  Correlation = c(cor_term_gpa, cor_cum_gpa, cor_gpas)
+)
+
+# Create the table
+kable(cor_data, caption="Figure 5. Correlations Between Variables", format="markdown")
+```
+
+
+**What do the residuals in each model indicate about the significance of the model?**
+
+Homoskedasticity refers to the equal scatter of residuals at different levels of TotalSleepTime.Hours.
+We test homoskedasticity because it is an essential assumption on linear regression, such that the residuals
+are evenly distributed at different levels of the response variable.
+
+Below are the plots for the residuals yielded for two linear models: (1) Hours slept vs. Current GPA
+and (2) Hours slept & Previous GPA vs. Current GPA.
+
+While the figure on the left does not have homoskedastic residuals, the right figure (measuring both
+cumulative GPA and sleep hours as predictor variables) appears to have a reliable variance
+throughout different levels of the response variable.
+
+```{r, echo=FALSE, message=FALSE, fig.width=5.5, fig.height=3, fig.align='center'}
+# Hours slept and Previous GPA vs. Current GPA
+sleep.residuals.cum = ggplot(data=sleep, aes(x=fitted(sleep.lm.gpas), y=resid(sleep.lm.gpas))) +
+  geom_point(alpha=0.6, color="#f77f6d") +
+  geom_smooth(method="loess", se=FALSE, linetype="dashed") +
+  labs(x="Fitted Values", y="Residuals", caption="Figure 7.") +
+  ggtitle("Residuals \n Cumulative GPA & Sleep Hours") +
+  theme(text=element_text(family="Times"),
+        plot.title=element_text(size=12, hjust=0.5))
+
+# Hours slept vs. Current GPA
+sleep.residuals.term = ggplot(data=sleep, aes(x=fitted(sleep.lm.term_gpa), y=resid(sleep.lm.term_gpa))) +
+  geom_point(alpha=0.6, color="#f77f6d") +
+  geom_smooth(method="loess", se=FALSE, linetype="dashed") +
+  labs(x="Fitted Values", y="Residuals", caption="Figure 6.") +
+  ggtitle("Residuals \n Sleep Hours") +
+  theme(text=element_text(family="Times"),
+        plot.title=element_text(size=12, hjust=0.5))
+
+grid.arrange(sleep.residuals.term, sleep.residuals.cum, ncol=2)
+```
+
+
+**Which linear model best predicts current GPA (term_gpa)?**
+
+The correlational data suggests that previous GPA is most correlated with current GPA (term_gpa) over
+sleep time hours (TotalSleepTime.Hours). Additionally, if sleep time remains the only predictor variable,
+we see in the residual plots, that it does not pass homoskedasticity while the other model (with both
+cumulative GPA and sleep time as predictors) achieved such tests.
+
+> The result section will include the regression model with two predictors (TotalSleepTime.Hours & cum_gpa) and one response
+variable (term_gpa). With the three given variables, this model will most likely be able to explain if there is an association between
+sleep time and GPA (4a. Resarch Question 1 Results).
+
+
+### Confidence Intervals, Significance Testing, and Standardized Model
+
+We first performed confidence intervals to measure the uncertainty in the association between sleep time in hours in our model.
+This will determine the precision of the parameter estimate, as a confidence interval suggesting more uncertainty
+indicates an unsatisfactory model.
+
+After, we performed significance testing on all the parameters of the model. This indicates whether or not the predictor variables
+has a statistically significant effect on the response, in this case current GPA. Because this significance testing was based
+on both predictor variables, we standardized the model, such that comparison between the estimates of the predictor variables
+is reliable.
+
+
+## 3b. Research Question 2 Methods
+
+> *What average GPA effect do we expect to see with 2 hours less sleep?*
+
+In order estimate the average GPA effect, we first performed a simple beta coefficient calculation,
+such that the estimate for total sleep time in hours is reduced by 2 hours less sleep respectively.
+Additionally, we perform a confidence interval in order to test the uncertainty of the value
+representing this effect. This will not only provide an estimate to how average GPA is affected
+by 2 hours less of sleep, but it will also provide a range of plausible values that can demonstrate the
+where the true parameter is likely to fall and outline the extent of uncertainty.
+
+
+## 3c. Research Question 3 Methods
+
+> *Based on the data, can we conclude that the GPA change is caused by less sleep, or could their be other reasons for the relationship?*
+
+This question involves correlation vs. causation. Correlation does not imply causation,
+and because there is no form of experimental study design methods, we explain why we cannot assume GPA change
+is caused by less sleep relationship further in the results section.
+
+
+
+# 4. Results
+
+## 4a. Research Question 1 Results
+
+> *What is the association between sleep time and GPA? Is there evidence that students who sleep less indeed get lower GPAs?*
+
+To assess the association between sleep time and GPA, we look at the regression model with the two predictors
+(Sleep time in Hours & Cumulative GPA) below. We see that that the estimates of both predictor variables are positive.
+
+
+```{r, echo=FALSE, options(scipen=999)}
+# Model sleep data
+sleep.lm = data.frame(
+  Predictor=c("Intercept", "Sleep Time in Hours", "Cumulative GPA", "Overall"),
+  Estimate=c("0.045105",
+             round(coef(sleep.lm.gpas)["TotalSleepTime.Hours"], 5),
+             round(coef(sleep.lm.gpas)["trans.cum_gpa"], 5),
+             "*"),
+  Std_Error=c("0.044115",
+              round(summary(sleep.lm.gpas)$coef["TotalSleepTime.Hours", "Std. Error"], 5),
+              round(summary(sleep.lm.gpas)$coef["trans.cum_gpa", "Std. Error"], 5),
+              "*"),
+  T_Value=c("1.022",
+            round(summary(sleep.lm.gpas)$coef["TotalSleepTime.Hours", "t value"],5),
+            round(summary(sleep.lm.gpas)$coef["trans.cum_gpa", "t value"],5),
+            "*"),
+  P_Value=c("0.306969",
+            summary(sleep.lm.gpas)$coef["TotalSleepTime.Hours", "Pr(>|t|)"],
+            summary(sleep.lm.gpas)$coef["trans.cum_gpa", "Pr(>|t|)"],
+            "< 2.2e-16"))
+
+# Create the table
+kable(sleep.lm, caption="Figure 8. Linear Model Summary", format="markdown")
+```
+
+
+Additionally, the multiple linear regression model in Figure 9 below shows a clear positive linear relationship, which
+is represented by the following linear regression equation:
+
+> \begin{equation} Y = 0.045105 + 0.02232X_1 + 0.72605X_2 \end{equation}
+
+
+```{r, echo=FALSE, fig.width=4.5, fig.height=3.4, fig.align='center', message=FALSE}
+# Multiple Linear Regression Model
+sleep.gpa.lm = data.frame(
+  Observed=sleep$trans.term_gpa,
+  Predicted=predict(sleep.lm.gpas))
+
+ggplot(sleep.gpa.lm, aes(x=Observed, y=Predicted)) +
+  geom_point(alpha=0.5) +
+  geom_smooth(method=lm, color="#f77f6d", fill="#8cd4c8") +
+  labs(x="Predictor Variables (TotalSleepTime.Hours & trans.cum_gpa)",
+       y="Current GPA (term_gpa)", caption="Figure 9.") +
+  scale_x_continuous(breaks = seq(0, max(sleep$TotalSleepTime.Hours), by=0.5)) +
+  ggtitle("Observed Variables vs. \n Predicted Current Semester GPA") +
+  theme(text=element_text(family="Times"),
+        axis.title=element_text(size=10),
+        plot.title=element_text(size=12, hjust=0.5))
+
+```
+
+
+**How much uncertainty is there in the association between sleep time and term_gpa?**
+
+However, before finalizing a linear regression equation, it is important to note the uncertainty with confidence intervals
+and significance with hypothesis testing, as further explained in the methods section (3a).
+
+```{r, include=FALSE}
+# Confidence interval
+confint(sleep.lm.gpas, 'TotalSleepTime.Hours', level=0.95)
+```
+
+Based on summary reports on the regression model as well as confidence interval predictions,
+we assume the following:
+
+> Getting an additional hour of sleep is associated with having a current semester GPA that is
+$\hat{\beta_1} = 0.022$ units higher, on average (95% CI[0.01,0.034]).
+
+
+**Are the predictors useful in predicting the current semester GPA?**
+
+Based on summary reports on the regression model, specifically the beta coefficients and p-values,
+we create a null and alternative hypothesis to check for significance:
+
+> $H_0: \beta_1, \beta_2 = 0$
+
+> $H_1: \beta_1$ or $\beta_2 \neq 0$
+
+
+> There is strong evidence that at least one parameter, total sleep time in hours (TotalSleepTime.Hours) or cumulative GPA (cum_gpa), is associated with current GPA (term_gpa) (F=304.5, p<2.2e-16).
+
+
+To find *which* predictor is better at predicting the students' current GPA, the initial parameter coefficients cannot be compared
+because they have different units and scales (GPA vs. Hours). Since we have established if the predictors are useful for predicting
+the current semester GPA, we will calculate the standardized coefficients to compare the predictors themselves.
+
+```{r, include=FALSE}
+# Standardized linear model
+hours.cum.std = lm(scale(trans.term_gpa)~scale(TotalSleepTime.Hours)+scale(trans.cum_gpa), data=sleep)
+summary(hours.cum.std)
+```
+```{r, echo=FALSE}
+# Model sleep data
+sleep.lm.std = data.frame(
+  Predictor=c("Sleep Time in Hours", "Cumulative GPA", "Overall", "Scaled Sleep Time Hours", "Scaled Cumulative GPA"),
+  
+  Estimate=c(round(coef(sleep.lm.gpas)["TotalSleepTime.Hours"], 5),
+             round(coef(sleep.lm.gpas)["trans.cum_gpa"], 5),
+             "*",
+             "0.1037", "0.6817"),
+  
+  Std_Error=c(round(summary(sleep.lm.gpas)$coef["TotalSleepTime.Hours", "Std. Error"], 5),
+              round(summary(sleep.lm.gpas)$coef["trans.cum_gpa", "Std. Error"], 5),
+              "*",
+              "2.857e-02", "2.857e-02"),
+  
+  T_Value=c(round(summary(sleep.lm.gpas)$coef["TotalSleepTime.Hours", "t value"],5),
+            round(summary(sleep.lm.gpas)$coef["trans.cum_gpa", "t value"],5),
+            "*",
+            "3.628", "23.858"),
+  
+  P_Value=c(summary(sleep.lm.gpas)$coef["TotalSleepTime.Hours", "Pr(>|t|)"],
+            summary(sleep.lm.gpas)$coef["trans.cum_gpa", "Pr(>|t|)"],
+            "< 2.2e-16",
+            "0.000309", "< 2e-16" ))
+
+# Create the table
+kable(sleep.lm.std, caption="Figure 10. Linear Model Summary Wtih Standardized Estimates", format="markdown")
+```
+
+
+Figure 10 includes the standardized estimates for total sleep time in hours and cumulative GPA.
+Since it standardized, we can now compare the estimates:
+
+> A one standard deviation increase in hour is associated with a 0.1037 increase in current GPA, assuming cumulative GPA is held constant.
+
+> A one standard deviation increase in cumulative GPA is associated with a 0.6817 standard deviation increase in current GPA, assuming sleep time is held contant.
+
+
+We see in our estimates that the cumulative GPA is more highly associated with current GPA over sleep time in hours.
+With this information, we are finally able to answer the research question.
+
+
+
+*What is the association between sleep time and GPA? Is there evidence that students who sleep less indeed get lower GPAs?*
+
+
+> Based on the confidence intervals, getting an additional hour of sleep is associated with having a current semester GPA that is
+$\hat{\beta_1} = 0.022$ units higher, on average (95% CI[0.01,0.034]).
+
+> Although there is some statistically significant association between sleep and GPA, as the linear regression model shows,
+cumulative GPA was a better indicator in predicting current GPA over hours of sleep a student received.
+
+
+
+## 4b. Research Question 2 Results
+
+> *What average GPA effect do we expect to see with 2 hours less sleep?*
+
+```{r, echo=FALSE}
+less_sleep_effect = coef(sleep.lm.gpas)["TotalSleepTime.Hours"]*(-2)
+
+less_sleep_df = data.frame(Effect=less_sleep_effect)
+
+kable(less_sleep_df, caption="Figure 11.", format="markdown")
+```
+
+To estimate the average current GPA effect on 2 hours less sleep each night, we use the previous
+beta coefficient for total sleep time in hours (TotalSleepTime.Hours) in the linear regression model for predicting
+its effect on the current GPA. To test its uncertainty, a confidence interval is also shown below.
+
+```{r, echo=FALSE}
+# Confidence Interval
+alpha = 0.05
+t_crit = qt(1-alpha/2, df=631)
+# Margin of error
+se = summary(sleep.lm.gpas)$coef["TotalSleepTime.Hours", "Std. Error"]
+moe = t_crit*se
+# Lower and Upper bound
+lower_bound = less_sleep_effect - moe
+upper_bound = less_sleep_effect + moe
+
+effect_ci = data.frame(Lower=lower_bound, Upper=upper_bound)
+kable(effect_ci, caption="Figure 12.", format="markdown")
+```
+
+
+Based on the average effect size and confidence interval calculation, we assume the following:
+
+> On average, we expect that 2 hours less sleep each night is associated with a decrease in current GPA by -0.0446466 units,
+(95% CI[-0.0567303, -0.0325628]).
+
+
+
+## 4c. Research Question 3 Results
+
+> *Based on the data, can we conclude that the GPA change is caused by less sleep, or could their be other reasons for the relationship?*
+
+No, we cannot conclude that GPA change is *caused* by less sleep.
+There are a variety of other reasons that may explain this relationship, such as stress and
+mental health fluctuations, motivation adjustments throughout the semester, or student preferences
+in time of day to work. All of these factors can directly affect either hours of sleep or GPA.
+
+Additionally, although there is evidence of correlation in GPA change and less sleep, a conclusion regarding
+causation cannot be made unless there is random assignment. In exploring the correlation analysis and
+standardized model, we also concluded that cumulative GPA is a better indicator for GPA change than hours of sleep.
+This might be because those who receive better grades previously do better in the next semester, which may mean
+that is more dependent on the student and their academic goals rather than hours of sleep students receive.
+
+Hence, due to these confounding variables and lack of experimental data collection, we cannot assume
+that lack of sleep cases GPA change.
+
+# Conclusion
+
+Overall, there does seem to be some correlation between GPA and sleep hours, but to answer the
+research questions, we state the following:
+
+1. On average, an additional hour of sleep accounts for 0.022 units higher in current semester GPA. Although the correlation is
+significant and reliable, we found that the other variable (previous semester GPA) is better at predicting if students who get
+less sleep indeed get lower GPAs.
+
+2. On average, 2 hours less sleep is associated with a decrease in GPA by -0.0446466 units. However,
+this does not indicate whether or not the implementation of 8 am classes is associated with less sleep.
+
+3. We cannot conclude that GPA change is caused by less sleep due to various confounding variables
+not controlled for in an experimental study design.
+
+The main limitations of our analysis comes from the abundance of potential confounding variables.
+The relationship between GPA and sleep hours is affected by a variety of different factors, such as
+sleep quality, sleep schedule (such as naps), physical activity, or mental health. All of these factors
+that can potentially affect either the predictor or response variables were unaccounted for.
+In future analysis, it may be important to look at the other variables in the sleep dataset, or within the
+collection process, also measure academic motivations.
+
+
+
+
